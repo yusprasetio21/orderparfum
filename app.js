@@ -251,11 +251,19 @@ const App = (() => {
       const inCart = Utils.Cart.hasItem(productId);
       const cartQty = Utils.Cart.getQuantity(productId);
 
+      // Store product data di data attributes biar ga ribet dengan quote
+      const productData = JSON.stringify({
+        id: productId,
+        name: productName,
+        price: productPrice,
+        image: mainImage,
+      }).replace(/"/g, "&quot;");
+
       html += `
-                <div class="product-card" id="product-${productId}">
+                <div class="product-card" id="product-${productId}" data-product='${productData}'>
                     <div class="card-header">
                         <div class="card-header-left">
-                            <div class="card-avatar">${productName.charAt(0).toUpperCase()}</div>
+                            <div class="card-avatar">${Utils.sanitize(productName.charAt(0).toUpperCase())}</div>
                             <div class="card-username">Laqiy Isshoni Lucky Parfum</div>
                         </div>
                         <i class="fas fa-ellipsis-h"></i>
@@ -276,8 +284,7 @@ const App = (() => {
                     <div class="card-actions">
                         <div class="action-icons">
                             <i class="far fa-heart like-btn"
-                               data-product-id="${productId}"
-                               onclick="App.toggleLike(this, '${productId}')"></i>
+                               data-product-id="${productId}"></i>
                         </div>
                         <i class="far fa-bookmark"></i>
                     </div>
@@ -300,11 +307,11 @@ const App = (() => {
                               inCart
                                 ? `
                                 <div class="quantity-selector" style="justify-content: flex-end;">
-                                    <button class="qty-btn" onclick="App.updateCartQuantity('${productId}', -1)">
+                                    <button class="qty-btn qty-minus" data-product-id="${productId}">
                                         <i class="fas fa-minus"></i>
                                     </button>
                                     <span class="qty-display" id="qty-display-${productId}">${cartQty}</span>
-                                    <button class="qty-btn" onclick="App.updateCartQuantity('${productId}', 1)">
+                                    <button class="qty-btn qty-plus" data-product-id="${productId}">
                                         <i class="fas fa-plus"></i>
                                     </button>
                                 </div>
@@ -315,10 +322,11 @@ const App = (() => {
                         <div class="checkout-btns">
                             <button class="add-to-cart-btn ${inCart ? "added" : ""}"
                                     id="cart-btn-${productId}"
-                                    onclick="${inCart ? `App.removeFromCart('${productId}')` : `App.addToCart('${productId}', '${Utils.sanitize(productName).replace(/'/g, "\\'")}', ${productPrice}, '${mainImage}')`}">
+                                    data-product-id="${productId}"
+                                    data-action="${inCart ? "remove" : "add"}">
                                 ${inCart ? '<i class="fas fa-check"></i> Di Keranjang' : '<i class="fas fa-cart-plus"></i> Tambah ke Keranjang'}
                             </button>
-                            <button class="checkout-btn" onclick="App.openSingleCheckout('${productId}', '${Utils.sanitize(productName).replace(/'/g, "\\'")}', ${productPrice}, '${mainImage}')">
+                            <button class="checkout-btn" data-product-id="${productId}" data-action="buy">
                                 Beli Langsung
                             </button>
                         </div>
@@ -715,14 +723,14 @@ const App = (() => {
     updateOrderSummary();
   }
 
-  function selectShipping(type, cost) {
+  function selectShipping(type, cost, el) {
     state.shippingType = type;
     state.shippingCost = cost;
 
     document
       .querySelectorAll(".shipping-item")
       .forEach((item) => item.classList.remove("active"));
-    event.currentTarget.classList.add("active");
+    if (el) el.classList.add("active");
 
     updateOrderSummary();
   }
@@ -1366,6 +1374,55 @@ const App = (() => {
         if (input) searchProducts(input.value);
       });
     }
+
+    // EVENT DELEGATION: Semua tombol dalam products-container
+    const container = document.getElementById("products-container");
+    if (container) {
+      container.addEventListener("click", function (e) {
+        const target = e.target.closest("button");
+        if (!target) return;
+
+        const productId = target.dataset.productId;
+        const action = target.dataset.action;
+
+        // Ambil data produk dari parent card
+        const card = target.closest(".product-card");
+        let product = null;
+        if (card && card.dataset.product) {
+          try {
+            product = JSON.parse(card.dataset.product);
+          } catch (ex) {
+            product = null;
+          }
+        }
+
+        if (action === "add" && product) {
+          addToCart(product.id, product.name, product.price, product.image);
+        } else if (action === "remove" && productId) {
+          removeFromCart(productId);
+        } else if (action === "buy" && product) {
+          openSingleCheckout(
+            product.id,
+            product.name,
+            product.price,
+            product.image,
+          );
+        } else if (target.classList.contains("qty-minus") && productId) {
+          updateCartQuantity(productId, -1);
+        } else if (target.classList.contains("qty-plus") && productId) {
+          updateCartQuantity(productId, 1);
+        }
+      });
+    }
+
+    // EVENT DELEGATION: Like buttons
+    document.addEventListener("click", function (e) {
+      const likeBtn = e.target.closest(".like-btn");
+      if (likeBtn) {
+        const pid = likeBtn.dataset.productId;
+        if (pid) toggleLike(likeBtn, pid);
+      }
+    });
   }
 
   return {
